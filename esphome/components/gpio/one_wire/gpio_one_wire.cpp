@@ -87,22 +87,32 @@ bool HOT IRAM_ATTR GPIOOneWireBus::read_bit_() {
 
   uint32_t start = micros();
   // datasheet says >1µs
-  delayMicroseconds(2);
+  delayMicroseconds(3);
 
   // release bus, delay E
   pin_.pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
 
+  // Unfortunately some frameworks have different characteristics than others
+  // esp32 arduino appears to pull the bus low only after the digital_write(false),
+  // whereas on esp-idf it already happens during the pin_mode(OUTPUT)
+  // manually correct for this with these constants.
+
+#ifdef USE_ESP32
+  uint32_t timing_constant = 12;
+#else
+  uint32_t timing_constant = 14;
+#endif
+
   // measure from start value directly, to get best accurate timing no matter
   // how long pin_mode/delayMicroseconds took
-  uint32_t now = micros();
-  if (now - start < 12)
-    delayMicroseconds(12 - (now - start));
+  while (micros() - start < timing_constant)
+    ;
 
   // sample bus to read bit from peer
   bool r = pin_.digital_read();
 
   // read slot is at least 60µs; get as close to 60µs to spend less time with interrupts locked
-  now = micros();
+  uint32_t now = micros();
   if (now - start < 60)
     delayMicroseconds(60 - (now - start));
 
